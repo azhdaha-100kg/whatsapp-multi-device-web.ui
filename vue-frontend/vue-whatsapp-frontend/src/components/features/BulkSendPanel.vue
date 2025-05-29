@@ -45,105 +45,96 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'; //
-import { useSessionStore } from '../../stores/sessionStore'; //
-import { sendMessageApi, sendImageApi, sendTypingStateApi, checkWhatsAppNumberApi } from '../../services/api'; // sendMessageApi, sendImageApi, sendTypingStateApi
+import { ref } from 'vue';
+import { useSessionStore } from '../../stores/sessionStore';
+import { sendMessageApi, sendImageApi, sendTypingStateApi, checkWhatsAppNumberApi } from '../../services/api';
 
-const sessionStore = useSessionStore(); //
-const recipients = ref(''); //
-const messageText = ref(''); //
-const mediaSourceType = ref('none'); //
-const selectedMediaFile = ref(null); //
-const mediaUrl = ref(''); //
-// mediaCaption ref is removed as the input for it was replaced by sendIntervalSeconds
-const sendIntervalSeconds = ref(5); // Default interval 5 seconds
+const sessionStore = useSessionStore();
+const recipients = ref('');
+const messageText = ref('');
+const mediaSourceType = ref('none');
+const selectedMediaFile = ref(null);
+const mediaUrl = ref('');
+const sendIntervalSeconds = ref(5); 
 
-const isSending = ref(false); //
-const overallStatus = ref('Status will appear here.'); //
-const overallStatusType = ref(''); //
-const resultsLog = ref([]); //
-const bulkSendFormElement = ref(null); //
+const isSending = ref(false);
+const overallStatus = ref('Status will appear here.');
+const overallStatusType = ref('');
+const resultsLog = ref([]);
+const bulkSendFormElement = ref(null);
 
-function handleFileSelect(event) { selectedMediaFile.value = event.target.files[0] || null; } //
-function onMediaSourceChange() { //
-  if (mediaSourceType.value === 'file') { //
-    mediaUrl.value = ''; //
-  } else if (mediaSourceType.value === 'url') { //
-    selectedMediaFile.value = null; //
-    const fileInput = document.getElementById('panelBulkMediaFileInput'); //
-    if (fileInput) fileInput.value = ''; //
+function handleFileSelect(event) { selectedMediaFile.value = event.target.files[0] || null; }
+function onMediaSourceChange() {
+  if (mediaSourceType.value === 'file') {
+    mediaUrl.value = '';
+  } else if (mediaSourceType.value === 'url') {
+    selectedMediaFile.value = null;
+    const fileInput = document.getElementById('panelBulkMediaFileInput');
+    if (fileInput) fileInput.value = '';
   } else {
-    selectedMediaFile.value = null; //
-    mediaUrl.value = ''; //
-    const fileInput = document.getElementById('panelBulkMediaFileInput'); //
-    if (fileInput) fileInput.value = ''; //
+    selectedMediaFile.value = null;
+    mediaUrl.value = '';
+    const fileInput = document.getElementById('panelBulkMediaFileInput');
+    if (fileInput) fileInput.value = '';
   }
 }
 
-// Helper function for creating a delay
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function handleBulkSend() {
-  if (!sessionStore.currentSelectedSessionId || !sessionStore.selectedSessionData?.isReady) { //
-    overallStatus.value = 'Select a ready session first.'; //
-    overallStatusType.value = 'error'; //
+  if (!sessionStore.currentSelectedSessionId || !sessionStore.selectedSessionData?.isReady) {
+    overallStatus.value = 'Select a ready session first.';
+    overallStatusType.value = 'error';
     return;
   }
-  const recipientsArray = recipients.value.trim().split(/[\n,]+/).map(r => r.trim()).filter(r => r); //
-  if (recipientsArray.length === 0) { //
-    overallStatus.value = 'Recipients are required.'; //
-    overallStatusType.value = 'error'; //
+  const recipientsArray = recipients.value.trim().split(/[\n,]+/).map(r => r.trim()).filter(r => r);
+  if (recipientsArray.length === 0) {
+    overallStatus.value = 'Recipients are required.';
+    overallStatusType.value = 'error';
     return;
   }
-
-  // Validate interval
   if (typeof sendIntervalSeconds.value !== 'number' || sendIntervalSeconds.value < 1) {
     overallStatus.value = 'Interval must be a number and at least 1 second.';
     overallStatusType.value = 'error';
     return;
   }
 
-  const currentMessageText = messageText.value.trim(); //
-  // currentMediaCaption is no longer used from a dedicated input
-
-  if (!currentMessageText && mediaSourceType.value === 'none') { //
-    overallStatus.value = 'Message text or media is required.'; //
-    overallStatusType.value = 'error'; //
+  const currentMessageText = messageText.value.trim();
+  if (!currentMessageText && mediaSourceType.value === 'none') {
+    overallStatus.value = 'Message text or media is required.';
+    overallStatusType.value = 'error';
     return;
   }
-  let currentMediaFile = selectedMediaFile.value; //
-  let currentMediaUrl = mediaUrl.value.trim(); //
-  if (mediaSourceType.value === 'file' && !currentMediaFile) { //
-    overallStatus.value = 'Media file is required for upload source.'; //
-    overallStatusType.value = 'error'; //
+  let currentMediaFile = selectedMediaFile.value;
+  let currentMediaUrl = mediaUrl.value.trim();
+  if (mediaSourceType.value === 'file' && !currentMediaFile) {
+    overallStatus.value = 'Media file is required for upload source.';
+    overallStatusType.value = 'error';
     return;
   }
-  if (mediaSourceType.value === 'url' && !currentMediaUrl) { //
-    overallStatus.value = 'Media URL is required for URL source.'; //
-    overallStatusType.value = 'error'; //
+  if (mediaSourceType.value === 'url' && !currentMediaUrl) {
+    overallStatus.value = 'Media URL is required for URL source.';
+    overallStatusType.value = 'error';
     return;
   }
 
-  isSending.value = true; //
-  overallStatus.value = `Starting bulk send to ${recipientsArray.length} recipients...`; //
-  overallStatusType.value = 'info'; //
-  resultsLog.value = []; //
-  if (bulkSendFormElement.value) bulkSendFormElement.value.querySelectorAll('input, textarea, button').forEach(el => el.disabled = true); //
+  isSending.value = true;
+  overallStatus.value = `Starting bulk send to ${recipientsArray.length} recipients...`;
+  overallStatusType.value = 'info';
+  resultsLog.value = [];
+  if (bulkSendFormElement.value) bulkSendFormElement.value.querySelectorAll('input, textarea, button').forEach(el => el.disabled = true);
   
-  let successes = 0, failures = 0; //
+  let successes = 0, failures = 0;
 
-  for (let i = 0; i < recipientsArray.length; i++) { //
-    const recipientTarget = recipientsArray[i]; //
-    resultsLog.value.push({ message: `Processing ${recipientTarget}... `, type: 'info' }); //
+  for (let i = 0; i < recipientsArray.length; i++) {
+    const recipientTarget = recipientsArray[i];
+    resultsLog.value.push({ message: `Processing ${recipientTarget}... `, type: 'info' });
     let currentLogIndex = resultsLog.value.length - 1;
+    let messageSentSuccessfullyInThisIteration = false; // Flag for this iteration
 
-    let result = { success: false, error: 'No action taken' }; //
-    let actionTaken = false; //
-    let logMessageSuffix = ''; //
-    
-    const recipientChatId = recipientTarget.includes('@') ? recipientTarget : `${recipientTarget.replace(/\D/g, '')}@c.us`; //
+    const recipientChatId = recipientTarget.includes('@') ? recipientTarget : `${recipientTarget.replace(/\D/g, '')}@c.us`;
 
     // Step 1: Check if number is registered on WhatsApp
     let isRegistered = false;
@@ -154,65 +145,63 @@ async function handleBulkSend() {
         isRegistered = true;
         resultsLog.value[currentLogIndex].message += 'Registered. ';
       } else {
-        resultsLog.value[currentLogIndex].message += `Not registered on WhatsApp (${checkResponse.message || checkResponse.error || 'Unknown reason'}). Skipping.`;
+        resultsLog.value[currentLogIndex].message += `Not registered (${checkResponse.message || checkResponse.error || 'Unknown'}). Skipping.`;
         resultsLog.value[currentLogIndex].type = 'error';
         failures++;
-        if (i < recipientsArray.length - 1) {
-          await delay(sendIntervalSeconds.value * 1000);
-        }
-        continue; 
+        overallStatus.value = `Processed ${i + 1}/${recipientsArray.length}. OK: ${successes}, Fail: ${failures}.`;
+        continue; // Skip to the next recipient immediately, no delay
       }
     } catch (e) {
       resultsLog.value[currentLogIndex].message += `Error checking number: ${e.message}. Skipping.`;
       resultsLog.value[currentLogIndex].type = 'error';
       failures++;
-      if (i < recipientsArray.length - 1) {
-        await delay(sendIntervalSeconds.value * 1000);
-      }
-      continue; 
+      overallStatus.value = `Processed ${i + 1}/${recipientsArray.length}. OK: ${successes}, Fail: ${failures}.`;
+      continue; // Skip to the next recipient immediately, no delay
     }
 
     // Step 2: Send Typing Indicator (if enabled and number registered)
-    if (sessionStore.sessionFeatureToggles.isTypingIndicatorEnabled) { //
+    if (sessionStore.sessionFeatureToggles.isTypingIndicatorEnabled) {
       try { 
-        await sendTypingStateApi(sessionStore.currentSelectedSessionId, recipientChatId); //
+        await sendTypingStateApi(sessionStore.currentSelectedSessionId, recipientChatId);
       } catch (e) { 
-        console.warn(`Could not send typing state to ${recipientChatId}`, e) //
+        console.warn(`Could not send typing state to ${recipientChatId}`, e);
       }
     }
 
     // Step 3: Send Message/Media (if number registered)
     resultsLog.value[currentLogIndex].message += 'Sending... ';
-    if (mediaSourceType.value !== 'none') { //
-      actionTaken = true; //
-      const fd = new FormData(); //
-      fd.append('number', recipientTarget); //
-      // Use messageText as caption if sending media
+    let result = { success: false, error: 'No action taken' };
+    let actionTaken = false;
+    let logMessageSuffix = '';
+    
+    if (mediaSourceType.value !== 'none') {
+      actionTaken = true;
+      const fd = new FormData();
+      fd.append('number', recipientTarget);
       fd.append('caption', currentMessageText || ''); 
-      
-      if (currentMediaFile) { //
-        fd.append('imageFile', currentMediaFile); //
-      } else if (currentMediaUrl) { //
-        fd.append('imageUrl', currentMediaUrl); //
+      if (currentMediaFile) {
+        fd.append('imageFile', currentMediaFile);
+      } else if (currentMediaUrl) {
+        fd.append('imageUrl', currentMediaUrl);
       }
-      result = await sendImageApi(sessionStore.currentSelectedSessionId, fd); //
-      logMessageSuffix = currentMessageText ? 'media with caption' : 'media'; //
-    } else if (currentMessageText) { //
-      actionTaken = true; //
-      result = await sendMessageApi(sessionStore.currentSelectedSessionId, recipientTarget, currentMessageText); //
-      logMessageSuffix = 'text'; //
+      result = await sendImageApi(sessionStore.currentSelectedSessionId, fd);
+      logMessageSuffix = currentMessageText ? 'media with caption' : 'media';
+    } else if (currentMessageText) {
+      actionTaken = true;
+      result = await sendMessageApi(sessionStore.currentSelectedSessionId, recipientTarget, currentMessageText);
+      logMessageSuffix = 'text';
     }
 
-    // const logIndex = resultsLog.value.length -1; // This was defined above, re-assigning is not needed.
-    if (actionTaken) { //
-      if (result.success) { //
-        resultsLog.value[currentLogIndex].message += `Sent ${logMessageSuffix}!`; //
-        resultsLog.value[currentLogIndex].type = 'success'; //
-        successes++; //
+    if (actionTaken) {
+      if (result.success) {
+        resultsLog.value[currentLogIndex].message += `Sent ${logMessageSuffix}!`;
+        resultsLog.value[currentLogIndex].type = 'success';
+        successes++;
+        messageSentSuccessfullyInThisIteration = true; // Mark as successful send
       } else {
-        resultsLog.value[currentLogIndex].message += `Failed to send: ${result.error || 'Unknown error'}`; //
-        resultsLog.value[currentLogIndex].type = 'error'; //
-        failures++; //
+        resultsLog.value[currentLogIndex].message += `Failed to send: ${result.error || 'Unknown error'}`;
+        resultsLog.value[currentLogIndex].type = 'error';
+        failures++;
       }
     } else { 
       resultsLog.value[currentLogIndex].message += 'Skipped (no message/media specified).';
@@ -220,18 +209,19 @@ async function handleBulkSend() {
       failures++; 
     }
     
-    overallStatus.value = `Processed ${i + 1}/${recipientsArray.length}. OK: ${successes}, Fail: ${failures}.`; //
+    overallStatus.value = `Processed ${i + 1}/${recipientsArray.length}. OK: ${successes}, Fail: ${failures}.`;
 
-    if (i < recipientsArray.length - 1) { //
-      // Use the user-defined interval from sendIntervalSeconds
-      resultsLog.value.push({ message: `Waiting for ${sendIntervalSeconds.value}s...`, type: 'info' });
-      await delay(sendIntervalSeconds.value * 1000); // Use new delay function
+    // --- MODIFIED DELAY LOGIC ---
+    // Only wait if a message was actually sent in this iteration AND it's not the last recipient
+    if (messageSentSuccessfullyInThisIteration && i < recipientsArray.length - 1) {
+      resultsLog.value.push({ message: `Waiting for ${sendIntervalSeconds.value}s before next message...`, type: 'info' });
+      await delay(sendIntervalSeconds.value * 1000);
     }
   }
 
-  overallStatus.value = `Bulk send complete. Total: ${recipientsArray.length}, OK: ${successes}, Fail: ${failures}.`; //
-  overallStatusType.value = failures > 0 ? 'error' : (successes > 0 ? 'success' : 'info'); //
-  isSending.value = false; //
-  if (bulkSendFormElement.value) bulkSendFormElement.value.querySelectorAll('input, textarea, button').forEach(el => el.disabled = false); //
+  overallStatus.value = `Bulk send complete. Total: ${recipientsArray.length}, OK: ${successes}, Fail: ${failures}.`;
+  overallStatusType.value = failures > 0 ? 'error' : (successes > 0 ? 'success' : 'info');
+  isSending.value = false;
+  if (bulkSendFormElement.value) bulkSendFormElement.value.querySelectorAll('input, textarea, button').forEach(el => el.disabled = false);
 }
 </script>

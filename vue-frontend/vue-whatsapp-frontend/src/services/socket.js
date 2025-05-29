@@ -4,7 +4,7 @@ import { useSessionStore } from '../stores/sessionStore'; //
 import { useChatStore } from '../stores/chatStore'; //
 import { useAuthStore } from '@/stores/authStore';
 
-const BASE_URL = 'https://backend.yourdomain.com'; // Your backend URL
+const BASE_URL = import.meta.env.VITE_SOCKET_BASE_URL || 'http://143.198.216.76:3000';
 let socket = null;
 
 export function initializeSocket() {

@@ -1,5 +1,6 @@
 // backend/server.js
-require('dotenv').config();
+require('dotenv').config(); // Load environment variables first
+
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
@@ -8,74 +9,58 @@ const { Client, LocalAuth, MessageMedia, Location } = require('whatsapp-web.js')
 const path = require('path');
 const multer = require('multer');
 const axios = require('axios');
-const jwt = require('jsonwebtoken'); // For JWT
-const bcrypt = require('bcryptjs'); // For password hashing
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 const app = express();
-app.use(cors());
+
+// --- CORS Setup ---
+const frontendURL = process.env.FRONTEND_URL || 'http://143.198.216.76/:8787'; // Define your frontend URL
+app.use(cors({
+    origin: frontendURL
+}));
+// --- End CORS Setup ---
+
 app.use(express.json());
 
 // --- Authentication Setup ---
-const JWT_SECRET = process.env.JWT_SECRET || 'jwtsecret.env'; // Store this securely, e.g., in .env file
+const JWT_SECRET = process.env.JWT_SECRET || 'your-very-secret-and-complex-key-change-this';
 
-// Sample user store (replace with a database in production)
 const users = [
     {
         id: 1,
         username: 'admin',
-        passwordHash: bcrypt.hashSync(process.env.ADMIN_PASSWORD || '', 10)
-    },
-    {
-        id: 2, // Make sure ID is unique
-        username: 'User1', // Your new username
-        passwordHash: bcrypt.hashSync(process.env.USER1_PASSWORD || '', 10)
-    },
-	{
-        id: 3,
-        username: 'User2',
-        passwordHash: bcrypt.hashSync(process.env.USER2_PASSWORD || '', 10)
+        passwordHash: bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'devpassword123', 10)
     }
-    // You can add more users following this pattern
+    // Add more users here if needed
 ];
 
-// Middleware to authenticate JWT token
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-    if (token == null) return res.sendStatus(401); // If no token, unauthorized
-
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token == null) return res.sendStatus(401);
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) {
             console.error('Token verification failed:', err.message);
-            return res.sendStatus(403); // If token is not valid, forbidden
+            return res.sendStatus(403);
         }
-        req.user = user; // Add user payload to request object
-        next(); // Proceed to the protected route
+        req.user = user;
+        next();
     });
 }
 // --- End Authentication Setup ---
-
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 const server = http.createServer(app);
-const frontendURL = 'https://zonagacor.xyz'; // YOUR FRONTEND DOMAIN
-const backendURL = 'https://backend.zonagacor.xyz'; // YOUR BACKEND DOMAIN
-
-app.use(cors({
-    origin: [frontendURL, backendURL] // Allow both for flexibility, or just frontendURL if backend API is not directly accessed
-}));
-// ...
 const io = new Server(server, {
     cors: {
-        origin: frontendURL, // Socket connections will originate from your frontend domain
+        origin: frontendURL, // Use the same frontendURL for Socket.IO
         methods: ["GET", "POST"]
     }
 });
 
-// --- Socket.IO Authentication Middleware ---
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (token) {
@@ -84,7 +69,7 @@ io.use((socket, next) => {
                 console.error('Socket Auth Error: Invalid token');
                 return next(new Error('Authentication error: Invalid token'));
             }
-            socket.user = decoded; // Attach user info to the socket
+            socket.user = decoded;
             console.log(`Socket ${socket.id} authenticated for user: ${socket.user.username}`);
             next();
         });
@@ -93,7 +78,6 @@ io.use((socket, next) => {
         next(new Error('Authentication error: No token provided'));
     }
 });
-// --- End Socket.IO Authentication Middleware ---
 
 const PORT = process.env.PORT || 3000;
 
@@ -152,14 +136,14 @@ function createWhatsappSession(sessionId) {
 
     client.on('message', async msg => {
         console.log(`[${sessionId}] RX MSG From:${msg.from} Body:${msg.body}`);
-        // Only emit to sockets in the room that belong to the authenticated user
-        // This check might be more complex depending on how you map socket users to WhatsApp sessions
         io.to(sessionId).emit('new_message', {
             sessionId,
             message: {
                 from: msg.from, to: msg.to, body: msg.body, timestamp: msg.timestamp,
-                id: msg.id.id, author: msg.author, isStatus: msg.isStatus,
-                isGroupMsg: msg.isGroupMsg, hasMedia: msg.hasMedia, type: msg.type
+                id: msg.id._serialized || msg.id.id, // Ensure a serializable ID
+                author: msg.author, isStatus: msg.isStatus,
+                isGroupMsg: msg.isGroupMsg, hasMedia: msg.hasMedia, type: msg.type,
+                fromMe: msg.fromMe // Add fromMe for UI differentiation
             }
         });
     });
@@ -193,30 +177,22 @@ app.post('/auth/login', async (req, res) => {
     if (!username || !password) {
         return res.status(400).json({ success: false, error: 'Username and password are required.' });
     }
-
     const user = users.find(u => u.username === username);
     if (!user) {
         return res.status(401).json({ success: false, error: 'Invalid credentials.' });
     }
-
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
         return res.status(401).json({ success: false, error: 'Invalid credentials.' });
     }
-
-    // User authenticated, generate JWT
-    const userPayload = { id: user.id, username: user.username }; // Don't include sensitive info
-    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '24h' }); // Token expires in 24 hours
-
+    const userPayload = { id: user.id, username: user.username };
+    const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '24h' });
     res.json({ success: true, message: 'Login successful', token: token, user: userPayload });
 });
 
 // --- Protected API Endpoints ---
-// Apply authenticateToken middleware to all /session routes
-
-app.post('/session/init/:sessionId', authenticateToken, (req, res) => { // Added authenticateToken
+app.post('/session/init/:sessionId', authenticateToken, (req, res) => {
     const { sessionId } = req.params;
-    // Access req.user here if needed, e.g., to associate session with a user
     console.log(`User ${req.user.username} trying to init session ${sessionId}`);
     if (!sessionId) return res.status(400).json({ success: false, error: 'Session ID required.' });
     if (sessions[sessionId]) {
@@ -233,7 +209,7 @@ app.post('/session/init/:sessionId', authenticateToken, (req, res) => { // Added
     }
 });
 
-app.get('/sessions', authenticateToken, (req, res) => { // Added authenticateToken
+app.get('/sessions', authenticateToken, (req, res) => {
     res.json({ success: true, sessions: Object.keys(sessions).map(id => ({
         sessionId: id,
         isReady: clientReadyStatus[id] || false,
@@ -242,7 +218,7 @@ app.get('/sessions', authenticateToken, (req, res) => { // Added authenticateTok
   });
 });
 
-app.post('/session/remove/:sessionId', authenticateToken, async (req, res) => { // Added authenticateToken
+app.post('/session/remove/:sessionId', authenticateToken, async (req, res) => {
     const { sessionId } = req.params;
     const client = sessions[sessionId];
     if (client) {
@@ -258,22 +234,20 @@ app.post('/session/remove/:sessionId', authenticateToken, async (req, res) => { 
     delete sessions[sessionId];
     delete qrCodes[sessionId];
     delete clientReadyStatus[sessionId];
-    io.emit('session_removed', { sessionId }); // Consider targeting this emit too
+    io.emit('session_removed', { sessionId });
     io.emit('status_update', { sessionId, message: 'Session has been removed.' });
     res.json({ success: true, message: `Session '${sessionId}' removed/state cleared.` });
 });
 
-app.get('/session/is-registered/:sessionId/:number', authenticateToken, async (req, res) => { // Added authenticateToken
+app.get('/session/is-registered/:sessionId/:number', authenticateToken, async (req, res) => {
     const { sessionId, number } = req.params;
     const client = sessions[sessionId];
-
     if (!client || !clientReadyStatus[sessionId]) {
         return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.`, isRegistered: false });
     }
     if (!number) {
         return res.status(400).json({ success: false, error: 'Number to check is required.', isRegistered: false });
     }
-
     try {
         let numberIdToCheck = number.includes('@') ? number : `${number.replace(/\D/g, '')}@c.us`;
         const isRegistered = await client.isRegisteredUser(numberIdToCheck);
@@ -293,40 +267,59 @@ app.get('/session/is-registered/:sessionId/:number', authenticateToken, async (r
     }
 });
 
-app.post('/session/send-message/:sessionId', authenticateToken, async (req, res) => { // Added authenticateToken
+// MODIFIED /session/send-message TO INCLUDE QUOTED MESSAGE ID
+app.post('/session/send-message/:sessionId', authenticateToken, async (req, res) => {
     const { sessionId } = req.params;
-    const { number, message } = req.body;
+    const { number, message, quotedMessageId } = req.body; // <<< Added quotedMessageId
     const client = sessions[sessionId];
-    console.log(`[${sessionId}] API: User ${req.user.username} received send message request to ${number}`);
+
+    console.log(`[${sessionId}] API: User ${req.user.username} send message to ${number}${quotedMessageId ? ' (replying to ' + quotedMessageId + ')' : ''}`);
+
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
     if (!number || !message) return res.status(400).json({ success: false, error: 'Recipient & message required.' });
+
     try {
         if (await client.getState() !== 'CONNECTED') return res.status(400).json({ success: false, error: `Client ${sessionId} not connected.` });
         let chatId = number.includes('@') ? number : `${number.replace(/\D/g, '')}@c.us`;
-        console.log(`[${sessionId}] API: Sending message to ${chatId}: "${message}" by user ${req.user.username}`);
-        const msgSent = await client.sendMessage(chatId, message);
-        io.to(sessionId).emit('message_sent', { sessionId, to: chatId, body: message, id: msgSent.id.id, timestamp: msgSent.timestamp });
-        res.json({ success: true, message: 'Message sent!', msgData: {id: msgSent.id.id, timestamp: msgSent.timestamp} });
+
+        const messageOptions = {};
+        if (quotedMessageId) {
+            messageOptions.quotedMessageId = quotedMessageId; // Add this to options if provided
+        }
+
+        const msgSent = await client.sendMessage(chatId, message, messageOptions); // Pass options here
+
+        io.to(sessionId).emit('message_sent', { 
+            sessionId, 
+            to: chatId, 
+            body: message, 
+            id: msgSent.id._serialized || msgSent.id.id, // Ensure serializable ID
+            timestamp: msgSent.timestamp,
+            // Optionally include info if it was a reply for frontend to update UI if needed
+            // quotedMsg: quotedMessageId ? { id: quotedMessageId } : undefined 
+        });
+        res.json({ success: true, message: 'Message sent!', msgData: {id: msgSent.id._serialized || msgSent.id.id, timestamp: msgSent.timestamp} });
     } catch (e) {
         console.error(`[${sessionId}] API: Send message error to ${number} by user ${req.user.username}:`, e.message);
         res.status(500).json({ success: false, error: `Send fail: ${e.message}` });
     }
 });
 
-app.get('/session/chats/:sessionId', authenticateToken, async (req, res) => { // Added authenticateToken
+
+app.get('/session/chats/:sessionId', authenticateToken, async (req, res) => {
     const { sessionId } = req.params; const client = sessions[sessionId];
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
     try {
         if (await client.getState() !== 'CONNECTED') return res.status(400).json({ success: false, error: `Client ${sessionId} not connected.` });
         const chats = await client.getChats();
-        res.json({ success: true, chats: chats.map(c => ({ id:c.id._serialized, name:c.name, isGroup:c.isGroup, unreadCount:c.unreadCount, timestamp:c.timestamp, lastMessage: c.lastMessage ? { body:c.lastMessage.body, from:c.lastMessage.from, to:c.lastMessage.to, fromMe:c.lastMessage.fromMe, timestamp:c.lastMessage.timestamp, hasMedia:c.lastMessage.hasMedia, type:c.lastMessage.type } : null })) });
+        res.json({ success: true, chats: chats.map(c => ({ id:c.id._serialized, name:c.name, isGroup:c.isGroup, unreadCount:c.unreadCount, timestamp:c.timestamp, lastMessage: c.lastMessage ? { id: c.lastMessage.id._serialized || c.lastMessage.id.id, body:c.lastMessage.body, from:c.lastMessage.from, to:c.lastMessage.to, fromMe:c.lastMessage.fromMe, timestamp:c.lastMessage.timestamp, hasMedia:c.lastMessage.hasMedia, type:c.lastMessage.type, author: c.lastMessage.author } : null })) });
     } catch (e) {
         console.error(`[${sessionId}] API: Chat fetch error by user ${req.user.username}:`, e.message);
         res.status(500).json({ success: false, error: `Chat fetch fail: ${e.message}` });
     }
 });
 
-app.get('/session/contact-info/:sessionId/:contactId', authenticateToken, async (req, res) => { // Added authenticateToken
+app.get('/session/contact-info/:sessionId/:contactId', authenticateToken, async (req, res) => {
     const { sessionId, contactId } = req.params; const client = sessions[sessionId];
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
     if (!contactId) return res.status(400).json({ success: false, error: 'Contact ID required.' });
@@ -341,10 +334,14 @@ app.get('/session/contact-info/:sessionId/:contactId', authenticateToken, async 
     }
 });
 
-app.post('/session/send-image/:sessionId', authenticateToken, upload.single('imageFile'), async (req, res) => { // Added authenticateToken
+// MODIFIED /session/send-image TO INCLUDE QUOTED MESSAGE ID
+app.post('/session/send-image/:sessionId', authenticateToken, upload.single('imageFile'), async (req, res) => {
     const { sessionId } = req.params;
-    const { number, caption, imageUrl } = req.body;
+    const { number, caption, imageUrl, quotedMessageId } = req.body; // <<< Added quotedMessageId
     const client = sessions[sessionId];
+
+    console.log(`[${sessionId}] API: User ${req.user.username} send image to ${number}${quotedMessageId ? ' (replying to ' + quotedMessageId + ')' : ''}`);
+
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
     if (!number) return res.status(400).json({ success: false, error: 'Recipient required.' });
     if (!req.file && !imageUrl) return res.status(400).json({ success: false, error: 'Image file or URL required.' });
@@ -362,8 +359,22 @@ app.post('/session/send-image/:sessionId', authenticateToken, upload.single('ima
             media = new MessageMedia(mt,buf.toString('base64'),filename);
         }
         let chatId = number.includes('@') ? number : `${number.replace(/\D/g, '')}@c.us`;
-        await client.sendMessage(chatId, media, { caption: caption || '' });
-        io.to(sessionId).emit('media_sent', { sessionId, to: chatId, type: 'image', filename, caption: caption || '' });
+
+        const messageOptions = { caption: caption || '' };
+        if (quotedMessageId) {
+            messageOptions.quotedMessageId = quotedMessageId;
+        }
+
+        const msgSent = await client.sendMessage(chatId, media, messageOptions); // Pass options
+        io.to(sessionId).emit('media_sent', { 
+            sessionId, 
+            to: chatId, 
+            type: media.mimetype, // More accurate type
+            filename, 
+            caption: caption || '',
+            id: msgSent.id._serialized || msgSent.id.id // Ensure serializable ID
+            // quotedMsg: quotedMessageId ? { id: quotedMessageId } : undefined
+        });
         res.json({ success: true, message: 'Image sent!' });
     } catch (e) {
         console.error(`[${sessionId}] API: Image send error to ${number} by user ${req.user.username}:`, e.message);
@@ -371,16 +382,18 @@ app.post('/session/send-image/:sessionId', authenticateToken, upload.single('ima
     }
 });
 
-app.post('/session/send-location/:sessionId', authenticateToken, async (req, res) => { // Added authenticateToken
+app.post('/session/send-location/:sessionId', authenticateToken, async (req, res) => {
     const { sessionId } = req.params; const { number, latitude, longitude, description } = req.body; const client = sessions[sessionId];
+    // Note: whatsapp-web.js send Location does not directly support quoting message in the same way as text/media.
+    // If reply is needed for location, it typically means sending location as a new message and visually associating it in UI if possible.
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
     if (!number || latitude === undefined || longitude === undefined ) return res.status(400).json({ success: false, error: 'Recipient, latitude, longitude required.' });
     try {
         if (await client.getState() !== 'CONNECTED') return res.status(400).json({ success: false, error: `Client ${sessionId} not connected.` });
         const loc = new Location(parseFloat(latitude), parseFloat(longitude), description || undefined);
         let chatId = number.includes('@') ? number : `${number.replace(/\D/g, '')}@c.us`;
-        await client.sendMessage(chatId, loc);
-        io.to(sessionId).emit('location_sent', { sessionId, to: chatId, latitude, longitude, description });
+        const msgSent = await client.sendMessage(chatId, loc);
+        io.to(sessionId).emit('location_sent', { sessionId, to: chatId, latitude, longitude, description, id: msgSent.id._serialized || msgSent.id.id });
         res.json({ success: true, message: 'Location sent!' });
     } catch (e) {
         console.error(`[${sessionId}] API: Location send error to ${number} by user ${req.user.username}:`, e.message);
@@ -388,7 +401,7 @@ app.post('/session/send-location/:sessionId', authenticateToken, async (req, res
     }
 });
 
-app.post('/session/set-status/:sessionId', authenticateToken, async (req, res) => { // Added authenticateToken
+app.post('/session/set-status/:sessionId', authenticateToken, async (req, res) => {
     const { sessionId } = req.params; const { statusMessage } = req.body; const client = sessions[sessionId];
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
     if (typeof statusMessage !== 'string') return res.status(400).json({ success: false, error: 'statusMessage (string) required.' });
@@ -402,7 +415,7 @@ app.post('/session/set-status/:sessionId', authenticateToken, async (req, res) =
     }
 });
 
-app.post('/session/:sessionId/chat/:chatId/send-typing', authenticateToken, async (req, res) => { // Added authenticateToken
+app.post('/session/:sessionId/chat/:chatId/send-typing', authenticateToken, async (req, res) => {
     const { sessionId, chatId } = req.params;
     const client = sessions[sessionId];
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
@@ -411,12 +424,12 @@ app.post('/session/:sessionId/chat/:chatId/send-typing', authenticateToken, asyn
         const chat = await client.getChatById(chatId);
         if (!chat) return res.status(404).json({ success: false, error: `Chat ${chatId} not found in session ${sessionId}.` });
         await chat.sendStateTyping();
-        console.log(`[${sessionId}] API: Sent typing state to chat ${chatId} by user ${req.user.username}`);
+        // console.log(`[${sessionId}] API: Sent typing state to chat ${chatId} by user ${req.user.username}`); // Already logged by frontend action
         res.json({ success: true, message: `Typing state sent to ${chatId}` });
     } catch (error) { console.error(`[${sessionId}] API: Error sending typing state to ${chatId} by user ${req.user.username}:`, error.message); res.status(500).json({ success: false, error: `Typing state fail: ${error.message}` });}
 });
 
-app.post('/session/:sessionId/chat/:chatId/send-seen', authenticateToken, async (req, res) => { // Added authenticateToken
+app.post('/session/:sessionId/chat/:chatId/send-seen', authenticateToken, async (req, res) => {
     const { sessionId, chatId } = req.params;
     const client = sessions[sessionId];
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
@@ -425,18 +438,18 @@ app.post('/session/:sessionId/chat/:chatId/send-seen', authenticateToken, async 
         const chat = await client.getChatById(chatId);
         if (!chat) return res.status(404).json({ success: false, error: `Chat ${chatId} not found in session ${sessionId}.` });
         const success = await chat.sendSeen();
-        console.log(`[${sessionId}] API: Sent seen receipt to chat ${chatId}. Success: ${success} by user ${req.user.username}`);
+        // console.log(`[${sessionId}] API: Sent seen receipt to chat ${chatId}. Success: ${success} by user ${req.user.username}`);
         res.json({ success: success, message: success ? `Seen receipt sent` : `Failed to send seen` });
     } catch (error) { console.error(`[${sessionId}] API: Error sending seen receipt to ${chatId} by user ${req.user.username}:`, error.message); res.status(500).json({ success: false, error: `Send seen fail: ${error.message}` });}
 });
 
-app.post('/session/:sessionId/set-presence-online', authenticateToken, async (req, res) => { // Added authenticateToken
+app.post('/session/:sessionId/set-presence-online', authenticateToken, async (req, res) => {
     const { sessionId } = req.params;
     const client = sessions[sessionId];
     if (!client || !clientReadyStatus[sessionId]) return res.status(400).json({ success: false, error: `Session ${sessionId} not ready.` });
     try {
         await client.sendPresenceAvailable();
-        console.log(`[${sessionId}] API: Presence set to available (online) by user ${req.user.username}.`);
+        // console.log(`[${sessionId}] API: Presence set to available (online) by user ${req.user.username}.`);
         res.json({ success: true, message: 'Presence set online.' });
     } catch (error) { console.error(`[${sessionId}] API: Error setting presence online by user ${req.user.username}:`, error.message); res.status(500).json({ success: false, error: `Set presence fail: ${error.message}` });}
 });
@@ -444,19 +457,14 @@ app.post('/session/:sessionId/set-presence-online', authenticateToken, async (re
 
 // --- Socket.IO Connection Handling ---
 io.on('connection', (socket) => {
-    // Authentication is now handled by io.use() middleware
     console.log('Socket.IO user connected:', socket.id, socket.user ? `(User: ${socket.user.username})` : '(Unauthenticated)');
-
-    // Only allow joining rooms if authenticated
     if (!socket.user) {
         console.log(`Socket ${socket.id} tried to join room without authentication. Disconnecting.`);
         socket.disconnect(true);
         return;
     }
-
     socket.on('join_session_room', (sessionId) => {
         if (sessionId) {
-            // Future enhancement: check if socket.user has permission for this sessionId
             socket.join(sessionId);
             console.log(`Socket ${socket.id} (User: ${socket.user.username}) joined room ${sessionId}`);
             if (qrCodes[sessionId]) socket.emit('qr_code', { sessionId, qr: qrCodes[sessionId] });
@@ -467,7 +475,6 @@ io.on('connection', (socket) => {
     });
     socket.on('request_init_session', (sessionId) => {
         if (sessionId) {
-            // Future enhancement: check if socket.user has permission for this sessionId
             if (sessions[sessionId]) {
                  sessions[sessionId].getState().then(st => {
                      io.to(sessionId).emit('status_update', { sessionId, message: `Session '${sessionId}' exists. State: ${st}`, status: st, qr: qrCodes[sessionId] });

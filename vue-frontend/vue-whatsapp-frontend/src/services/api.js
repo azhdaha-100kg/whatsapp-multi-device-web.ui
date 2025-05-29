@@ -1,5 +1,7 @@
 // src/services/api.js
-const BASE_URL = 'https://backend.yourdomain.com'; // YOUR BACKEND URL
+const BASE_URL = process.env.NODE_ENV === 'production'
+    ? 'http://143.198.216.76:3000' // Replace with your actual production backend URL
+    : (import.meta.env.VITE_API_BASE_URL || 'http://143.198.216.76:3000'); // Use Vite env var or fallback for dev
 
 /**
  * Generic request helper function.
@@ -36,10 +38,10 @@ async function request(endpoint, options = {}, isLogin = false) {
 
         if (response.status === 401 && !isLogin) {
             console.error('API Request Unauthorized (401). Token might be invalid or expired.');
-            // Consider triggering logout via authStore or event bus for a better UX
-            // import { useAuthStore } from '@/stores/authStore'; // This would create circular dependency if used directly here.
-            // Event bus or direct window event might be better for decoupling.
-            // For now, we just return error; frontend components should handle this.
+            // Consider dispatching a logout action from your authStore here
+            // Example:
+            // const authStore = useAuthStore(); // This won't work directly here due to setup context
+            // window.dispatchEvent(new CustomEvent('auth-error-401')); // Then listen in App.vue
             return { success: false, error: 'Unauthorized. Please login again.', status: response.status };
         }
 
@@ -73,7 +75,7 @@ export const loginApi = (credentials) => {
     return request('/auth/login', {
         method: 'POST',
         body: JSON.stringify(credentials),
-    }, true); // Pass true for isLogin to skip adding Auth header
+    }, true);
 };
 
 
@@ -90,20 +92,29 @@ export const removeSessionApi = (sessionId) => {
     return request(`/session/remove/${sessionId}`, { method: 'POST' });
 };
 
-// --- New function to check WhatsApp Number ---
 export const checkWhatsAppNumberApi = (sessionId, numberToCheck) => {
     return request(`/session/is-registered/${sessionId}/${encodeURIComponent(numberToCheck)}`, { method: 'GET' });
 };
 
 // --- Feature-Specific API Calls ---
-export const sendMessageApi = (sessionId, recipient, message) => {
+// MODIFIED sendMessageApi
+export const sendMessageApi = (sessionId, recipient, message, quotedMessageId = null) => {
+    const payload = {
+        number: recipient,
+        message: message
+    };
+    if (quotedMessageId) {
+        payload.quotedMessageId = quotedMessageId;
+    }
     return request(`/session/send-message/${sessionId}`, {
         method: 'POST',
-        body: JSON.stringify({ number: recipient, message: message }),
+        body: JSON.stringify(payload),
     });
 };
 
-export const sendImageApi = (sessionId, formData) => {
+// MODIFIED sendImageApi (though FormData handling for quotedMessageId is done in the component)
+// The backend will pick up 'quotedMessageId' if it's part of the FormData
+export const sendImageApi = (sessionId, formData) => { // formData should contain 'number', 'caption', 'imageFile'/'imageUrl', and optionally 'quotedMessageId'
     return request(`/session/send-image/${sessionId}`, {
         method: 'POST',
         body: formData
