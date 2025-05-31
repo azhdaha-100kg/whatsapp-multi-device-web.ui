@@ -1,10 +1,10 @@
-# Multi-Device WhatsApp Web Interface
+# Multi-Device WhatsApp Web UI (Dockerized)
 
-A web application to interact with multiple WhatsApp accounts simultaneously, built with a Node.js backend (using [`whatsapp-web.js`](https://github.com/pedroslopez/whatsapp-web.js)) and a Vue.js frontend. This application now features user authentication for private access.
+A web application to interact with multiple WhatsApp accounts simultaneously, built with a Node.js backend (using `whatsapp-web.js`) and a Vue.js frontend. This version is configured for easy deployment using Docker, where the backend serves the frontend application.
 
 <div align="center" style="display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap;">
-  <img src="https://raw.githubusercontent.com/azhdaha-100kg/whatsapp-multi-device-web.ui/refs/heads/main/Login.png" alt="Login Screen" width="400" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; margin: 5px;" />
-  <img src="https://raw.githubusercontent.com/azhdaha-100kg/whatsapp-multi-device-web.ui/refs/heads/main/Dashboard.png" alt="Dashboard Screen" width="400" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; margin: 5px;" />
+  <img src="https://raw.githubusercontent.com/azhdaha-100kg/wwebjs-webui/main/Login.png" alt="Login Screen" width="400" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; margin: 5px;" />
+  <img src="https://raw.githubusercontent.com/azhdaha-100kg/wwebjs-webui/main/Dashboard.png" alt="Dashboard Screen" width="400" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; margin: 5px;" />
 </div>
 
 ---
@@ -13,27 +13,16 @@ A web application to interact with multiple WhatsApp accounts simultaneously, bu
 
 - [Features Overview](#features-overview)
 - [Core Technologies](#core-technologies)
-- [1. Prerequisites](#1-prerequisites)
-  - [1.1. Git](#11-git)
-  - [1.2. Node.js and npm](#12-nodejs-and-npm)
-- [2. Local Development Setup](#2-local-development-setup)
-  - [2.1. Clone the Repository](#21-clone-the-repository)
-  - [2.2. Backend Setup (Local Development)](#22-backend-setup-local-development)
-  - [2.3. Frontend Setup (Local Development)](#23-frontend-setup-local-development)
-  - [2.4. Running for Local Development](#24-running-for-local-development)
-- [3. Production Deployment Guide (Using Nginx)](#3-production-deployment-guide-using-nginx)
-  - [Prerequisites for Your Production Server](#prerequisites-for-your-production-server)
-  - [3.1. Backend Deployment on Server](#31-backend-deployment-on-server)
-  - [3.2. Frontend Build & Deployment on Server](#32-frontend-build--deployment-on-server)
-  - [3.3. Server Setup: Install Nginx](#33-server-setup-install-nginx)
-  - [3.4. DNS Configuration](#34-dns-configuration)
-  - [3.5. Nginx Configuration (Reverse Proxy)](#35-nginx-configuration-reverse-proxy)
-  - [3.6. HTTPS Setup with Certbot (Let's Encrypt)](#36-https-setup-with-certbot-lets-encrypt)
-  - [3.7. Final Testing](#37-final-testing)
-- [4. Using the Application](#4-using-the-application)
-- [5. Managing Users](#5-managing-users)
-- [6. Troubleshooting Common Production Issues](#6-troubleshooting-common-production-issues)
-- [7. Further Enhancements (Optional)](#7-further-enhancements-optional)
+- [Prerequisites](#prerequisites)
+- [Quick Start with Docker](#quick-start-with-docker)
+  - [1. Clone the Repository](#1-clone-the-repository)
+  - [2. Configure Environment Variables](#2-configure-environment-variables)
+  - [3. Build and Run with Docker Compose](#3-build-and-run-with-docker-compose)
+  - [4. Accessing the Application](#4-accessing-the-application)
+- [Managing Users](#managing-users)
+- [Persistent Data](#persistent-data)
+- [Troubleshooting Docker Setup](#troubleshooting-docker-setup)
+- [Further Enhancements (Optional)](#further-enhancements-optional)
 
 ---
 
@@ -44,460 +33,206 @@ A web application to interact with multiple WhatsApp accounts simultaneously, bu
 - **Multi-Device Session Management**: Add, List, Select, QR Auth, Remove WhatsApp sessions.
 - **Real-time Updates via Socket.IO** (Authenticated connections).
 - **User Actions per Session**:
-    - Send Text Messages (with WhatsApp number validation before sending).
-    - Send Images/Videos (via file upload or direct URL, with number validation).
+    - Send Text Messages (with WhatsApp number validation).
+    - Send Images/Videos (via file upload or direct URL).
     - Send Locations.
     - Get Contact Information.
     - Set User Status (About/Bio).
-    - Bulk Send Messages:
-        - Custom time interval (in seconds) between messages.
-        - WhatsApp number validation for each recipient.
-        - Client-side iteration for text/media (Message Text field used as caption for media).
+    - Bulk Send Messages.
+    - **New:** Bulk Check WhatsApp Numbers (with real-time log updates and stop functionality).
 - **Theming**: Light and Dark mode.
 - **Responsive UI**: Tailwind CSS.
-- **Frontend Routing**: Vue Router for navigation, including a login page and protected dashboard.
-- **State Management**: Pinia (for session state and authentication state).
+- **Frontend Routing**: Vue Router.
+- **State Management**: Pinia.
 
 ---
 
 ## Core Technologies
 
-- **Backend**: Node.js, Express, [`whatsapp-web.js`](https://github.com/pedroslopez/whatsapp-web.js), Socket.IO, Multer, Axios, `jsonwebtoken`, `bcryptjs`, `dotenv`
-- **Frontend**: Vue 3 (Composition API), Vite, Pinia, Vue Router, Tailwind CSS, Socket.IO Client, `qrcode.vue`
+- **Backend**: Node.js, Express, `whatsapp-web.js`, Socket.IO, `jsonwebtoken`, `bcryptjs`, `dotenv`
+- **Frontend**: Vue 3 (Composition API), Vite, Pinia, Vue Router, Tailwind CSS
+- **Containerization**: Docker, Docker Compose
 - **Language**: JavaScript
 
 ---
 
-## 1. Prerequisites
+## Prerequisites
 
-### 1.1. Git
-
-Required for version control and cloning this repository.
-- **Check if installed:**
-  ```bash
-  git --version
-  ```
-
-- **Install on Ubuntu/Debian:**
-  ```bash
-  sudo apt update
-  sudo apt install git -y
-  ```
-- **Other OS:** See [Git Downloads](https://git-scm.com/downloads)
-
-### 1.2. Node.js and npm
-
-Node.js is the JavaScript runtime environment, and npm is its package manager.
-
-- **Recommended:** Node.js 18.x LTS or 20.x LTS (or higher).
-- **Check if installed:**
-  ```bash
-  node -v
-  npm -v
-  ```
-- **Install/Update on Ubuntu/Debian (Example for Node.js 20.x):**
-  ```bash
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt-get install -y nodejs
-  ```
-- **Other OS:** See the [Node.js official site](https://nodejs.org/) or use a version manager like [nvm](https://github.com/nvm-sh/nvm).
+- **Git**: For cloning the repository.
+- **Docker**: Install Docker Desktop (for Windows/Mac) or Docker Engine (for Linux).
+- **Docker Compose**: Usually included with Docker Desktop. For Linux, you might need to install it separately if it's not part of your Docker Engine installation.
 
 ---
 
-## 2. Local Development Setup
+## Quick Start with Docker
 
-Follow these steps to set up and run the project on your local machine for development.
+This setup uses Docker to run the application. The backend will serve the frontend, simplifying deployment.
 
-### 2.1. Clone the Repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/azhdaha-100kg/wwebjs-webui.git
 cd wwebjs-webui
 ```
+If you are working on the `docker_setup` branch or another specific branch, make sure to check it out:
 
-### 2.2. Backend Setup (Local Development)
-
-This part sets up the Node.js server that handles WhatsApp interactions and authentication.
-
-- **Navigate to the backend directory:**
-  ```bash
-  cd backend
-  ```
-
-- **Install dependencies:**
-  ```bash
-  npm install
-  ```
-
-- **Create and Configure the `.env` File:**
-
-  In the backend directory, create a new file named `.env` and add:
-
-  ```
-  JWT_SECRET=your_strong_development_jwt_secret_key_here_at_least_32_chars
-  ADMIN_PASSWORD=devpassword123
-  # PORT=3000 (Optional: The backend defaults to port 3000 if not set)
-  # NODE_ENV=development (Optional)
-  ```
-
-  > - **JWT_SECRET:** A long, random, and secret string used to sign JSON Web Tokens.
-  > - **ADMIN_PASSWORD:** The password for the default 'admin' user (defined in `server.js`). The application will hash this password using bcryptjs.
-
-- **Security Note:**  
-  Ensure that `backend/.env` is listed in your project's root `.gitignore` file:
-  ```
-  # .gitignore
-  # ... other ignores ...
-  backend/.env
-  ```
-
-- **Puppeteer Dependencies (Required for Linux Systems):**  
-  `whatsapp-web.js` relies on Puppeteer, which in turn requires several system libraries on Linux:
-  ```bash
-  sudo apt-get update && sudo apt-get install -y \
-  ca-certificates fonts-liberation libappindicator3-1 libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 \
-  libc6 libcairo2 libcups2t64 libdbus-1-3 libexpat1 libfontconfig1 libgbm1 libgcc-s1 libglib2.0-0t64 \
-  libgtk-3-0t64 libnspr4 libnss3 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 \
-  libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 \
-  libxrandr2 libxrender1 libxss1 libxtst6 lsb-release wget xdg-utils \
-  --no-install-recommends
-  ```
-
-### 2.3. Frontend Setup (Local Development)
-
-This part sets up the Vue.js user interface.
-
-- **Navigate to the frontend directory:**  
-  From the project root:
-  ```bash
-  cd vue-frontend/vue-whatsapp-frontend
-  ```
-  *(If you are currently in the backend directory, use `cd ../vue-frontend/vue-whatsapp-frontend`)*
-
-- **Install frontend dependencies:**
-  ```bash
-  npm install
-  ```
-
-- **Configure Backend URL for Frontend Services:**  
-  Edit the following files in `vue-frontend/vue-whatsapp-frontend/src/services/`:
-
-  - In `api.js`:
-    ```js
-    const BASE_URL = 'http://localhost:3000'; // For local development
-    ```
-  - In `socket.js`:
-    ```js
-    const BASE_URL = 'http://localhost:3000'; // For local development
-    ```
-
-### 2.4. Running for Local Development
-
-You'll need two separate terminal windows: one for the backend and one for the frontend.
-
-- **Start the Backend Server:**
-  ```bash
-  cd backend
-  node server.js
-  ```
-  You should see:  
-  `Server with authentication running on http://localhost:3000`
-
-- **Start the Frontend Development Server:**
-  ```bash
-  cd vue-frontend/vue-whatsapp-frontend
-  npm run dev
-  ```
-  Vite will compile the frontend and usually start it on `http://localhost:8787/` (or another port if 8787 is busy).
-
-- **Access the Application:**  
-  Open your web browser and navigate to the frontend URL provided by Vite (e.g., http://localhost:8787/).
-
----
-
-## 3. Production Deployment Guide (Using Nginx)
-
-This section outlines deploying the application to a production server using Nginx as a reverse proxy.
-
-### Prerequisites for Your Production Server
-
-- A server (VPS, cloud instance, etc.) running a Linux distribution (e.g., Ubuntu).
-- Root or sudo access to the server.
-- Node.js and npm installed on the server.
-- Git installed on the server.
-- Your domain name (e.g., `mydomain.com`) purchased and ready for DNS configuration.
-
-### 3.1. Backend Deployment on Server
-
-- **SSH into your Production Server.**
-
-- **Clone or Update Your Application Code:**
-  ```bash
-  # If cloning for the first time on the server:
-  git clone https://github.com/azhdaha-100kg/wwebjs-webui.git
-  cd wwebjs-webui
-  # git checkout production # Switch to your production branch if you have one
-
-  # If updating an existing deployment:
-  # cd /path/to/your/wwebjs-webui
-  # git checkout production
-  # git pull origin production
-  ```
-
-- **Navigate to Backend and Install Dependencies:**
-  ```bash
-  cd backend
-  npm install --production
-  ```
-
-- **Ensure Puppeteer dependencies (see section 2.2) are installed on the server.**
-
-- **Create Production `.env` File for Backend:**
-  ```bash
-  nano .env
-  ```
-  ```
-  JWT_SECRET=your_ULTRA_STRONG_random_production_jwt_secret_key
-  ADMIN_PASSWORD=your_actual_STRONG_production_admin_password
-  PORT=3000 
-  NODE_ENV=production 
-  ```
-
-  > This file contains sensitive information; ensure its permissions are restrictive.
-
-- **Update CORS in `server.js` for Production Domains:**
-  Edit `backend/server.js`:
-  ```js
-  const frontendURL = 'https://mydomain.com'; 
-  app.use(cors({
-      origin: frontendURL 
-  }));
-  const io = new Server(server, {
-      cors: {
-          origin: frontendURL, 
-          methods: ["GET", "POST"]
-      }
-  });
-  ```
-  Save the file.
-
-- **Run Backend with PM2:**
-  ```bash
-  sudo npm install pm2 -g
-  pm2 start server.js --name "whatsapp-backend"
-  pm2 startup
-  # (Run the command that pm2 outputs after pm2 startup)
-  pm2 save
-  ```
-  - Check status: `pm2 list`
-  - View logs: `pm2 logs whatsapp-backend`
-
-### 3.2. Frontend Build & Deployment on Server
-
-- **Update Frontend API/Socket URLs (CRITICAL):**
-  - In `src/services/api.js`:
-    ```js
-    const BASE_URL = 'https://backend.mydomain.com';
-    ```
-  - In `src/services/socket.js`:
-    ```js
-    const BASE_URL = 'https://backend.mydomain.com';
-    ```
-  Commit these changes and ensure they are present on the server before building.
-
-- **Build the Frontend:**
-  ```bash
-  npm install 
-  npm run build
-  ```
-  This creates a `dist/` folder containing optimized static assets.
-
-- **Upload Frontend `dist` Folder to Server:**
-  ```bash
-  sudo mkdir -p /var/www/mydomain.com/html
-  scp -r dist/* your_username@YOUR_SERVER_PUBLIC_IP:/var/www/mydomain.com/html/
-  sudo chown -R www-data:www-data /var/www/mydomain.com/html
-  sudo chmod -R 755 /var/www/mydomain.com/html
-  ```
-
-### 3.3. Server Setup: Install Nginx
-
-- **Install Nginx:**
-  ```bash
-  sudo apt update
-  sudo apt install nginx -y
-  ```
-- **Allow HTTP and HTTPS traffic:**
-  ```bash
-  sudo ufw allow 'Nginx Full'
-  # sudo ufw enable
-  # sudo ufw status
-  ```
-
-### 3.4. DNS Configuration
-
-- **Frontend A record:**  
-  - **Type:** A  
-  - **Host/Name:** @ (or mydomain.com)  
-  - **Points to:** YOUR_SERVER_PUBLIC_IP
-
-- **Backend A record:**  
-  - **Type:** A  
-  - **Host/Name:** backend  
-  - **Points to:** YOUR_SERVER_PUBLIC_IP
-
-> DNS changes may take some time to propagate.
-
-### 3.5. Nginx Configuration (Reverse Proxy)
-
-#### Backend: `backend.mydomain.com`
-
-Create `/etc/nginx/sites-available/backend.mydomain.com` with:
-
-```
-server {
-    listen 80;
-    listen [::]:80;
-    server_name backend.mydomain.com;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
+```bash
+git checkout docker_setup
 ```
 
-#### Frontend: `mydomain.com`
+### 2. Configure Environment Variables
 
-Create `/etc/nginx/sites-available/mydomain.com` with:
+The application uses an `.env` file in the project root to manage essential configurations for the Docker container.
 
+Create the `.env` file:
+- Copy the example file (if you have one named `.env.example`) or create a new file named `.env` in the root of the `wwebjs-webui` project.
+
+```bash
+cp .env.example .env
 ```
-server {
-    listen 80;
-    listen [::]:80;
-    server_name mydomain.com www.mydomain.com;
+*(If you don't have `.env.example`, create `.env` manually with the content below).*
 
-    root /var/www/mydomain.com/html;
-    index index.html index.htm;
+Edit the `.env` file with your settings:
 
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
+```env
+# .env
+
+# Application Configuration
+NODE_ENV=production
+PORT=3000 # Port INSIDE the container. APP_HOST_PORT (below) maps to this.
+
+# Security: REPLACE THESE WITH YOUR OWN STRONG, UNIQUE VALUES
+JWT_SECRET=your_very_strong_and_unique_jwt_secret_key_here_at_least_32_characters
+ADMIN_PASSWORD=a_very_secure_admin_password_for_the_admin_user
+USER1_PASSWORD=a_very_secure_password_for_user1
+USER2_PASSWORD=a_very_secure_password_for_user2
+# Add more USERX_PASSWORD variables as needed, and update server.js user array
+
+# CORS_ORIGIN: The URL your browser uses to access this application.
+# If APP_HOST_PORT (below) is 3000, then CORS_ORIGIN is http://localhost:3000
+# If accessing via IP: CORS_ORIGIN=http://YOUR_SERVER_IP:3000
+# For multiple origins, use a comma-separated list: http://localhost:3000,http://192.168.1.10:3000
+CORS_ORIGIN=http://localhost:3000
+
+# Host Port Mapping (Optional - if you want to change the default 3000 on your host machine)
+# This is the port you will use in your browser to access the app.
+APP_HOST_PORT=3000
 ```
 
-- **Enable sites and restart Nginx:**
-  ```bash
-  sudo ln -s /etc/nginx/sites-available/mydomain.com /etc/nginx/sites-enabled/
-  sudo ln -s /etc/nginx/sites-available/backend.mydomain.com /etc/nginx/sites-enabled/
-  sudo rm /etc/nginx/sites-enabled/default # if it exists
-  sudo nginx -t
-  sudo systemctl restart nginx
-  ```
+**Important:**
+- Replace placeholder values for `JWT_SECRET` and passwords with your actual strong secrets.
+- Adjust `CORS_ORIGIN` based on how you will access the application from your browser (e.g., `http://localhost:3000` if running Docker locally and using port 3000, or `http://YOUR_SERVER_IP:3000` if accessing via IP).
+- Ensure this `.env` file is listed in your `.gitignore` file to prevent committing secrets. Commit an `.env.example` file instead, with placeholder values.
 
-### 3.6. HTTPS Setup with Certbot (Let's Encrypt)
+### 3. Build and Run with Docker Compose
 
-- **Install Certbot:**
-  ```bash
-  sudo apt install certbot python3-certbot-nginx -y
-  ```
+Navigate to the root directory of the project (where `docker-compose.yml` is located) in your terminal.
 
-- **Obtain and Install SSL Certificates:**
-  ```bash
-  sudo certbot --nginx -d mydomain.com -d www.mydomain.com -d backend.mydomain.com
-  ```
-  - Choose option 2 (Redirect) when prompted for HTTP to HTTPS redirection.
+To build the images and start the application:
 
-- **Verify HTTPS:**
-  - Visit: `https://mydomain.com` and `https://backend.mydomain.com`
-  - Check for padlock icon and HTTP->HTTPS redirection.
+```bash
+docker-compose up --build
+```
 
-- **Verify Automatic Renewal:**
-  ```bash
-  sudo systemctl status certbot.timer
-  sudo certbot renew --dry-run
-  ```
+- The `--build` flag ensures Docker rebuilds the image if there are changes to the Dockerfile or application code.
+- The first build might take some time as it downloads Node.js images, system dependencies, and Chromium for Puppeteer.
 
-### 3.7. Final Testing and Checks
+To run in detached mode (in the background):
 
-- Access `https://mydomain.com`
-- Test login, session management, sending messages, real-time updates, etc.
-- Check browser console for CORS, mixed content, or JS errors.
-- Review Nginx and PM2 logs for issues.
+```bash
+docker-compose up --build -d
+```
+
+### 4. Accessing the Application
+
+Once the containers are running:
+
+- Open your web browser.
+- Navigate to the URL defined by your `CORS_ORIGIN` and `APP_HOST_PORT` in the `.env` file.
+  - Example: [http://localhost:3000](http://localhost:3000) (if `APP_HOST_PORT` is 3000 and you are on the same machine as Docker).
+  - Example: [http://YOUR_SERVER_IP:3000](http://YOUR_SERVER_IP:3000) (if accessing a remote Docker host).
+- You should see the login page. Use the credentials (e.g., `admin` and the `ADMIN_PASSWORD` you set) to log in.
 
 ---
 
-## 4. Using the Application
+## Managing Users
 
-- Navigate to `https://mydomain.com`
-- Login (username: `admin`, password from your `.env`)
-- Manage WhatsApp Sessions
-- Use features like sending text/media, bulk messaging, etc.
+User management is currently handled by editing the users array directly in `backend/server.js` and setting corresponding `USERX_PASSWORD` environment variables in your `.env` file.
 
----
+Edit `backend/server.js`: Locate the users array and add or modify user objects. Remember to hash passwords if you were doing it manually, though the current setup hashes passwords from the environment variables at startup.
 
-## 5. Managing Users
+```js
+// Example user entry in backend/server.js
+// const users = [
+//     { id: 1, username: 'admin', passwordHash: bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'adminpassword', 10) },
+//     { id: 2, username: 'User1', passwordHash: bcrypt.hashSync(process.env.USER1_PASSWORD || 'user1password', 10) },
+//     // Add new users here
+// ];
+```
 
-Currently, user management is manual:
+- **Update `.env`**: Add new `USERX_PASSWORD` variables for any new users.
+- **Rebuild and Restart Docker Container**:
 
-- **Generate Password Hash:**  
-  Use `bcryptjs.hashSync('yourNewPassword', 10)`
-- **Edit `backend/server.js`:**  
-  Add the new user object to the `users` array.
-- **Restart Backend:**  
-  ```bash
-  pm2 restart whatsapp-backend
-  ```
+```bash
+docker-compose up --build --force-recreate
+```
 
----
+Or, if you only changed `.env` and `server.js` doesn't require a full rebuild beyond dependency installation:
 
-## 6. Troubleshooting Common Production Issues
-
-- **502 Bad Gateway (Nginx):**
-  - Check PM2 status: `pm2 list`
-  - View logs: `pm2 logs whatsapp-backend`
-  - Ensure `proxy_pass` is correct in Nginx config
-
-- **403 Forbidden (Frontend):**
-  - Check permissions: `/var/www/mydomain.com/html`
-  - Nginx `root` directive
-
-- **404 Not Found (Vue Router):**
-  - Ensure `try_files $uri $uri/ /index.html;` in Nginx config
-
-- **CORS Errors:**
-  - Check `origin` in backend CORS settings
-  - Restart backend after changes
-
-- **Socket.IO Connection Problems:**
-  - Nginx `proxy_set_header` for `Upgrade` and `Connection`
-  - Check Socket.IO CORS
-
-- **Authentication/Token Issues:**
-  - JWT secret consistency
-  - Nginx passes `Authorization` header
-
-- **SSL Certificate Issues:**
-  - Check Certbot output and certificate expiration
-  - Nginx loads correct certificate paths
+```bash
+docker-compose restart app
+```
+*(A full rebuild is safer if unsure).*
 
 ---
 
-## 7. Further Enhancements (Optional)
+## Persistent Data
 
-- Database for User Management
-- Advanced Nginx Configuration (caching, security headers, rate limiting)
-- CI/CD Pipeline
-- More Granular Logging and Monitoring
+WhatsApp session data (authentication tokens, QR codes, etc.) is stored in a Docker named volume called `.wwebjs_auth_data`. This ensures your WhatsApp sessions persist even if you stop and restart the Docker container.
+
+- To view Docker volumes: `docker volume ls`
+- To remove the volume (e.g., to start fresh with all sessions):
+
+```bash
+docker-compose down -v
+```
+**Warning:** This will delete all current WhatsApp session data.
 
 ---
 
-> This README should now be significantly more detailed and beginner-friendly for the entire deployment process.  
-> **Remember to replace all placeholders with your specific information.**
+## Troubleshooting Docker Setup
+
+- **"Could not find expected browser (chrome) locally" error during runtime:**
+  - Ensure your root Dockerfile is up-to-date with the version that installs chromium via `apt-get` and sets `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true` and `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`.
+  - Perform a clean build: `docker-compose up --build --no-cache`.
+
+- **CORS Errors in Browser Console:**
+  - Double-check the `CORS_ORIGIN` value in your `.env` file. It must exactly match the URL your browser uses to access the application (including http:// and the port).
+  - Restart the Docker container after changing `.env`.
+
+- **Other Errors:**
+  - Check container logs: `docker-compose logs -f app`
+  - Ensure all necessary files are being copied correctly in the Dockerfile.
+
+---
+
+## Further Enhancements (Optional)
+
+- Database for User Management instead of hardcoding in `server.js`.
+- More granular logging.
+- Integration with a reverse proxy like Nginx or Traefik for easier SSL (HTTPS) setup and custom domain mapping if deploying publicly.
+
+---
+
+**Key changes from your previous README:**
+
+- **Focus on Docker:** The primary setup and deployment method described is now Docker-based.
+- **Simplified Prerequisites:** Only Git and Docker/Docker Compose are listed. Node.js/npm are needed for local development *if not using Docker*, but for a Docker-first approach, users only need Docker.
+- **Combined Setup:** Explains that the backend serves the frontend within the Docker setup.
+- **Environment Variables:** Emphasizes the use of the root `.env` file for configuration.
+- **Updated Feature List:** Includes the new "Bulk Check WhatsApp Numbers" feature.
+- **Removed Nginx/PM2 Deployment Section:** The Docker Compose setup replaces the manual Nginx/PM2 deployment for a simpler, containerized approach. If you want to keep the Nginx/PM2 instructions for non-Docker users, you can add them back in a separate section or an "Advanced Deployment" section.
+
+---
+
+This new README should give users a much clearer and simpler path to getting your application running using Docker. Remember to create an `.env.example` file (with placeholder values for secrets) and add your actual `.env` file to `.gitignore`.
